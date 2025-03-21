@@ -629,121 +629,122 @@
         }
 
         function setupMobileControls() {
-            const joystickMaxDistance = 50;
-            let joystickDragging = false;
-            let fireDragging = false;
+    const joystickMaxDistance = 50; // Maximum distance the joystick thumb can move
+    let joystickTouchId = null; // Track the specific touch for joystick
+    let fireTouchId = null; // Track the specific touch for fire button
 
-            joystickArea.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                isJoystickActive = true;
-                const now = Date.now();
-                if (now - lastJoystickTap < 300) {
-                    performDash();
-                    if (navigator.vibrate) navigator.vibrate(50);
+    // Joystick touch start
+    joystickArea.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (!joystickTouchId) {
+            const touch = e.changedTouches[0];
+            joystickTouchId = touch.identifier;
+            isJoystickActive = true;
+            const now = Date.now();
+            if (now - lastJoystickTap < 300) {
+                performDash();
+                if (navigator.vibrate) navigator.vibrate(50);
+            }
+            lastJoystickTap = now;
+            updateJoystickPosition(touch);
+        }
+    }, { passive: false });
+
+    // Fire button touch start
+    fireBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        if (!fireTouchId) {
+            const touch = e.changedTouches[0];
+            fireTouchId = touch.identifier;
+            isFireBtnActive = true;
+            if (gameRunning) {
+                firePlayerBullet();
+                if (autoFireInterval === null) {
+                    autoFireInterval = setInterval(() => {
+                        if (isFireBtnActive && gameRunning) firePlayerBullet();
+                    }, player.shootDelay);
                 }
-                lastJoystickTap = now;
-                updateJoystickPosition(e.touches[0]);
-            }, { passive: false });
+            }
+        }
+    }, { passive: false });
 
-            fireBtn.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                isFireBtnActive = true;
-                if (gameRunning) {
-                    firePlayerBullet();
-                    if (autoFireInterval === null) {
-                        autoFireInterval = setInterval(() => {
-                            if (isFireBtnActive && gameRunning) firePlayerBullet();
-                        }, player.shootDelay);
-                    }
-                }
-            }, { passive: false });
+    // Touch move for joystick
+    document.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.touches.length; i++) {
+            const touch = e.touches[i];
+            if (touch.identifier === joystickTouchId && isJoystickActive && gameRunning) {
+                updateJoystickPosition(touch);
+            }
+        }
+    }, { passive: false });
 
-            fireBtn.addEventListener('touchend', (e) => {
-                e.preventDefault();
+    // Touch end for joystick
+    document.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            if (touch.identifier === joystickTouchId) {
+                isJoystickActive = false;
+                joystickTouchId = null;
+                resetJoystick();
+            }
+            if (touch.identifier === fireTouchId) {
                 isFireBtnActive = false;
+                fireTouchId = null;
                 if (autoFireInterval !== null) {
                     clearInterval(autoFireInterval);
                     autoFireInterval = null;
                 }
-            }, { passive: false });
-
-            document.addEventListener('touchmove', (e) => {
-                e.preventDefault();
-                for (let i = 0; i < e.touches.length; i++) {
-                    const touch = e.touches[i];
-                    const joystickRect = joystickArea.getBoundingClientRect();
-                    if (touch.clientX >= joystickRect.left && touch.clientX <= joystickRect.right &&
-                        touch.clientY >= joystickRect.top && touch.clientY <= joystickRect.bottom &&
-                        isJoystickActive && gameRunning) {
-                        updateJoystickPosition(touch);
-                        break;
-                    }
-                }
-                if (joystickDragging) {
-                    const touch = e.touches[0];
-                    joystickContainer.style.left = `${touch.clientX - 60}px`;
-                    joystickContainer.style.bottom = `${window.innerHeight - touch.clientY - 60}px`;
-                }
-                if (fireDragging) {
-                    const touch = e.touches[0];
-                    fireBtnContainer.style.right = `${window.innerWidth - touch.clientX - 60}px`;
-                    fireBtnContainer.style.bottom = `${window.innerHeight - touch.clientY - 60}px`;
-                }
-            }, { passive: false });
-
-            document.addEventListener('touchend', (e) => {
-                if (e.touches.length === 0 || !hasJoystickTouch(e.touches)) {
-                    isJoystickActive = false;
-                    resetJoystick();
-                }
-                joystickDragging = false;
-                fireDragging = false;
-            }, { passive: false });
-
-            joystickContainer.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 2) joystickDragging = true;
-            });
-            fireBtnContainer.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 2) fireDragging = true;
-            });
-
-            function hasJoystickTouch(touches) {
-                const joystickRect = joystickArea.getBoundingClientRect();
-                for (let i = 0; i < touches.length; i++) {
-                    const touch = touches[i];
-                    if (touch.clientX >= joystickRect.left && touch.clientX <= joystickRect.right &&
-                        touch.clientY >= joystickRect.top && touch.clientY <= joystickRect.bottom) {
-                        return true;
-                    }
-                }
-                return false;
-            }
-
-            function updateJoystickPosition(touch) {
-                const joystickRect = joystickArea.getBoundingClientRect();
-                const centerX = joystickRect.left + joystickRect.width / 2;
-                const centerY = joystickRect.top + joystickRect.height / 2;
-                const deltaX = touch.clientX - centerX;
-                const deltaY = touch.clientY - centerY;
-                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                const limitedDistance = Math.min(distance, joystickMaxDistance);
-                const angle = Math.atan2(deltaY, deltaX);
-                
-                const limitedX = Math.cos(angle) * limitedDistance;
-                const limitedY = Math.sin(angle) * limitedDistance;
-
-                joystickThumb.style.transform = `translate(${limitedX}px, ${limitedY}px)`;
-                player.velocityX = (limitedX / joystickMaxDistance) * player.speed;
-                player.velocityY = (limitedY / joystickMaxDistance) * player.speed;
-            }
-
-            function resetJoystick() {
-                joystickThumb.style.transform = 'translate(-50%, -50%)';
-                player.velocityX = 0;
-                player.velocityY = 0;
             }
         }
+    }, { passive: false });
 
+    // Touch cancel (e.g., interrupted by system)
+    document.addEventListener('touchcancel', (e) => {
+        e.preventDefault();
+        for (let i = 0; i < e.changedTouches.length; i++) {
+            const touch = e.changedTouches[i];
+            if (touch.identifier === joystickTouchId) {
+                isJoystickActive = false;
+                joystickTouchId = null;
+                resetJoystick();
+            }
+            if (touch.identifier === fireTouchId) {
+                isFireBtnActive = false;
+                fireTouchId = null;
+                if (autoFireInterval !== null) {
+                    clearInterval(autoFireInterval);
+                    autoFireInterval = null;
+                }
+            }
+        }
+    }, { passive: false });
+
+    function updateJoystickPosition(touch) {
+        const joystickRect = joystickArea.getBoundingClientRect();
+        const centerX = joystickRect.left + joystickRect.width / 2;
+        const centerY = joystickRect.top + joystickRect.height / 2;
+        const deltaX = touch.clientX - centerX;
+        const deltaY = touch.clientY - centerY;
+        const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+        const limitedDistance = Math.min(distance, joystickMaxDistance);
+        const angle = Math.atan2(deltaY, deltaX);
+
+        const limitedX = Math.cos(angle) * limitedDistance;
+        const limitedY = Math.sin(angle) * limitedDistance;
+
+        joystickThumb.style.transform = `translate(${limitedX}px, ${limitedY}px)`;
+        player.velocityX = (limitedX / joystickMaxDistance) * player.speed;
+        player.velocityY = (limitedY / joystickMaxDistance) * player.speed;
+    }
+
+    function resetJoystick() {
+        joystickThumb.style.transform = 'translate(-50%, -50%)';
+        player.velocityX = 0;
+        player.velocityY = 0;
+    }
+}
         function handleResize() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
