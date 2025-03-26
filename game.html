@@ -48,6 +48,23 @@
       display: none;
     }
     
+    /* Mobile Popup */
+    #mobile-popup {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-color: rgba(0,0,0,0.8);
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: white;
+      z-index: 15;
+      transition: opacity 0.5s;
+    }
+    
     /* SVG home screen */
     #start-screen svg {
       width: 80%;
@@ -67,6 +84,7 @@
       cursor: pointer;
       transition: all 0.2s;
       font-family: 'Orbitron', sans-serif;
+      font-weight: bold;
     }
     
     button:hover {
@@ -308,7 +326,7 @@
           <circle cx="545" cy="190" r="1.6" fill="white"/>
         </g>
         <text x="400" y="100" font-family="'Orbitron', sans-serif" font-size="60" font-weight="bold" 
-              text-anchor="middle" fill="#0f0" stroke="#000" stroke-width="2" 
+              text-anchor="middle" fill="#0f0" stroke="#000" stroke-width="3" 
               style="filter: drop-shadow(0 0 10px #0f0);">
           <tspan x="400" dy="-20">SPACE</tspan>
           <tspan x="400" dy="60">SHOOTER</tspan>
@@ -339,7 +357,7 @@
       <button id="settings-btn">SETTINGS</button>
     </div>
     
-    <!-- Other screens -->
+    <!-- Game Over Screen -->
     <div id="game-over-screen">
       <h2>GAME OVER</h2>
       <p id="final-score">Your score: 0</p>
@@ -349,6 +367,7 @@
       <button id="back-to-menu-btn">MAIN MENU</button>
     </div>
     
+    <!-- High Scores Screen -->
     <div id="high-score-screen">
       <h2>HIGH SCORES</h2>
       <div id="high-scores-table">
@@ -367,6 +386,7 @@
       <button id="back-from-scores-btn">BACK</button>
     </div>
     
+    <!-- How To Play Screen -->
     <div id="how-to-play-screen">
       <h2>HOW TO PLAY</h2>
       <div style="max-width:600px; text-align:center; margin:20px;">
@@ -393,6 +413,7 @@
       <button id="back-from-help-btn">BACK</button>
     </div>
     
+    <!-- Pause Screen -->
     <div id="pause-screen">
       <h2>PAUSED</h2>
       <button id="resume-btn">RESUME</button>
@@ -400,9 +421,17 @@
       <button id="quit-to-menu-btn">MAIN MENU</button>
     </div>
     
+    <!-- Settings Screen -->
     <div id="settings-screen"></div>
     
-    <!-- Mobile Controls -->
+    <!-- Mobile Popup -->
+    <div id="mobile-popup">
+      <h2>Recommendation</h2>
+      <p>For the best gaming experience, we recommend playing Space Shooter on a desktop or laptop computer. A larger screen and precise controls can enhance your enjoyment. However, you can still play and enjoy the game on your mobile device. Click "Continue Play" to start your mission!</p>
+      <button id="continue-play-btn">Continue Play</button>
+    </div>
+    
+    <!-- Mobile Controls (appear only during gameplay) -->
     <div id="mobile-controls">
       <div id="joystick-container">
         <div id="joystick-area" class="control-btn">
@@ -414,7 +443,7 @@
       </div>
     </div>
     
-    <!-- Audio elements -->
+    <!-- Audio Elements -->
     <audio id="background-music" loop src="https://www.freesoundslibrary.com/wp-content/uploads/2021/07/space-ambient-background.mp3"></audio>
     <audio id="boss-music" loop src="https://www.freesoundslibrary.com/wp-content/uploads/2021/07/epic-space-battle.mp3"></audio>
     <audio id="game-start-sound" src="https://www.soundjay.com/buttons/beep-08b.mp3"></audio>
@@ -438,6 +467,7 @@
     const howToPlayScreen = document.getElementById("how-to-play-screen");
     const pauseScreen = document.getElementById("pause-screen");
     const settingsScreen = document.getElementById("settings-screen");
+    const mobilePopup = document.getElementById("mobile-popup");
     const finalScoreDisplay = document.getElementById("final-score");
     const mobileControls = document.getElementById("mobile-controls");
     const joystickArea = document.getElementById("joystick-area");
@@ -466,9 +496,7 @@
     let comboMultiplier = 1;
     let lastKillTime = 0;
     let highScores = [];
-    let powerUps = [];
     let explosions = [];
-    let particles = [];
     let enemySpeedMultiplier = 1;
     let shieldActive = false;
     let shieldTime = 0;
@@ -546,6 +574,26 @@
       speed: 6,
       angle: 0
     }));
+    const particlePool = Array(300).fill().map(() => ({
+      active: false,
+      x: 0,
+      y: 0,
+      radius: 0,
+      color: {r: 0, g: 0, b: 0},
+      speedX: 0,
+      speedY: 0,
+      life: 0
+    }));
+    const powerUpPool = Array(10).fill().map(() => ({
+      active: false,
+      x: 0,
+      y: 0,
+      width: 20,
+      height: 20,
+      speed: 3,
+      color: "",
+      effect: ""
+    }));
     let backgroundStarsSlow = [];
     let backgroundStarsFast = [];
     let enemySpawnRate = 1000;
@@ -563,7 +611,20 @@
       player.x = canvas.width / 2 - player.width / 2;
       player.y = canvas.height - player.height - 20;
       
-      if (isMobile) mobileControls.style.display = "block";
+      if (isMobile) mobileControls.style.display = "none";
+      
+      // Load settings from localStorage
+      const savedSettings = localStorage.getItem("spaceShooterSettings");
+      if (savedSettings) {
+        const settings = JSON.parse(savedSettings);
+        difficulty = settings.difficulty || "normal";
+        playerColorIndex = settings.playerColorIndex || 0;
+        soundOn = settings.soundOn !== undefined ? settings.soundOn : true;
+      } else {
+        difficulty = "normal";
+        playerColorIndex = 0;
+        soundOn = true;
+      }
       
       const savedScores = localStorage.getItem("spaceShooterHighScores");
       if (savedScores) highScores = JSON.parse(savedScores);
@@ -571,10 +632,8 @@
       lives = 3;
       combo = 0;
       comboMultiplier = 1;
-      difficulty = "normal";
       enemies = [];
-      powerUps = [];
-      particles = [];
+      explosions = [];
       player.bullets = [];
       player.bulletPool = Array(75).fill().map(() => ({
         active: false,
@@ -587,6 +646,8 @@
       }));
       enemyPool.forEach(e => e.active = false);
       enemyBulletPool.forEach(b => b.active = false);
+      particlePool.forEach(p => p.active = false);
+      powerUpPool.forEach(p => p.active = false);
       initBackgroundStars();
       updateScoreDisplay();
       updateComboDisplay();
@@ -594,7 +655,15 @@
       bossMusic.volume = 0.3;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       canvas.style.cursor = "default";
-      startScreen.style.display = "flex";
+      if (isMobile) {
+        mobilePopup.style.opacity = "0";
+        mobilePopup.style.display = "flex";
+        setTimeout(() => mobilePopup.style.opacity = "1", 10);
+      } else {
+        startScreen.style.opacity = "0";
+        startScreen.style.display = "flex";
+        setTimeout(() => startScreen.style.opacity = "1", 10);
+      }
     }
     
     function initBackgroundStars() {
@@ -652,6 +721,19 @@
       if (restartBtn) restartBtn.addEventListener("click", startGame);
       if (quitToMenuBtn) quitToMenuBtn.addEventListener("click", showStartScreen);
       
+      const continuePlayBtn = document.getElementById("continue-play-btn");
+      if (continuePlayBtn) {
+        continuePlayBtn.addEventListener("click", () => {
+          mobilePopup.style.opacity = "0";
+          setTimeout(() => {
+            mobilePopup.style.display = "none";
+            startScreen.style.opacity = "0";
+            startScreen.style.display = "flex";
+            setTimeout(() => startScreen.style.opacity = "1", 10);
+          }, 500);
+        });
+      }
+      
       canvas.addEventListener("mousemove", handleMouseMove);
       canvas.addEventListener("click", firePlayerBullet);
       window.addEventListener("keydown", handleKeyDown);
@@ -663,7 +745,6 @@
     function setupMobileControls() {
       const joystickMaxDistance = 50;
       let joystickDragging = false;
-      let fireDragging = false;
       
       joystickArea.addEventListener("touchstart", (e) => {
         e.preventDefault();
@@ -716,11 +797,6 @@
           joystickContainer.style.left = `${touch.clientX - 60}px`;
           joystickContainer.style.bottom = `${window.innerHeight - touch.clientY - 60}px`;
         }
-        if (fireDragging) {
-          const touch = e.touches[0];
-          fireBtnContainer.style.right = `${window.innerWidth - touch.clientX - 60}px`;
-          fireBtnContainer.style.bottom = `${window.innerHeight - touch.clientY - 60}px`;
-        }
       }, { passive: false });
       
       document.addEventListener("touchend", (e) => {
@@ -729,14 +805,10 @@
           resetJoystick();
         }
         joystickDragging = false;
-        fireDragging = false;
       }, { passive: false });
       
       joystickContainer.addEventListener("touchstart", (e) => {
         if (e.touches.length === 2) joystickDragging = true;
-      });
-      fireBtnContainer.addEventListener("touchstart", (e) => {
-        if (e.touches.length === 2) fireDragging = true;
       });
       
       function hasJoystickTouch(touches) {
@@ -844,17 +916,16 @@
         player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
         player.lastDash = now;
         playSound("dash");
-        // Add dash particles
         for (let i = 0; i < 10; i++) {
-          particles.push({
-            x: player.x + player.width / 2,
-            y: player.y + player.height,
-            radius: Math.random() * 2 + 1,
-            color: "#0f0",
-            speedX: (Math.random() - 0.5) * 4,
-            speedY: (Math.random() - 0.5) * 4,
-            life: 20
-          });
+          createParticle(
+            player.x + player.width / 2,
+            player.y + player.height,
+            Math.random() * 2 + 1,
+            "#0f0",
+            (Math.random() - 0.5) * 4,
+            (Math.random() - 0.5) * 4,
+            20
+          );
         }
       }
     }
@@ -892,8 +963,9 @@
     }
     
     function startGame() {
-      const difficultySetting = document.getElementById("difficulty-setting");
-      difficulty = difficultySetting ? difficultySetting.value : "normal";
+      // Removed: const difficultySetting = document.getElementById("difficulty-setting");
+      // Removed: difficulty = difficultySetting ? difficultySetting.value : "normal";
+      // Use difficulty from settings instead
       startScreen.style.opacity = "0";
       setTimeout(() => startScreen.style.display = "none", 500);
       gameOverScreen.style.display = "none";
@@ -901,6 +973,7 @@
       howToPlayScreen.style.display = "none";
       pauseScreen.style.display = "none";
       settingsScreen.style.display = "none";
+      mobilePopup.style.display = "none";
       score = 0;
       lives = 3;
       combo = 0;
@@ -912,13 +985,13 @@
       bossActive = false;
       lastBossScore = -5000;
       enemies = [];
-      powerUps = [];
       explosions = [];
-      particles = [];
       player.bullets = [];
       player.bulletPool.forEach(b => b.active = false);
       enemyPool.forEach(e => e.active = false);
       enemyBulletPool.forEach(b => b.active = false);
+      particlePool.forEach(p => p.active = false);
+      powerUpPool.forEach(p => p.active = false);
       player.x = canvas.width / 2 - player.width / 2;
       player.y = canvas.height - player.height - 20;
       player.weaponType = "default";
@@ -1263,7 +1336,6 @@
     }
     
     function spawnPowerUp() {
-      const x = Math.random() * (canvas.width - 20);
       const types = [
         { color: "#ff0", effect: "speed" },
         { color: "#00f", effect: "shield" },
@@ -1274,40 +1346,39 @@
         { color: "#ffd700", effect: "score_boost" }
       ];
       const type = types[Math.floor(Math.random() * types.length)];
-      powerUps.push({
-        x: x,
-        y: -20,
-        width: 20,
-        height: 20,
-        speed: 3,
-        color: type.color,
-        effect: type.effect
-      });
+      const powerUp = powerUpPool.find(p => !p.active);
+      if (powerUp) {
+        powerUp.active = true;
+        powerUp.x = Math.random() * (canvas.width - powerUp.width);
+        powerUp.y = -powerUp.height;
+        powerUp.color = type.color;
+        powerUp.effect = type.effect;
+      }
     }
     
     function updatePowerUps(deltaTime) {
-      for (let i = powerUps.length - 1; i >= 0; i--) {
-        const powerUp = powerUps[i];
+      powerUpPool.forEach(powerUp => {
+        if (!powerUp.active) return;
         powerUp.y += powerUp.speed * deltaTime * 60;
         if (powerUp.y > canvas.height) {
-          powerUps.splice(i, 1);
-          continue;
+          powerUp.active = false;
+          return;
         }
         ctx.fillStyle = powerUp.color;
         ctx.fillRect(powerUp.x, powerUp.y, powerUp.width, powerUp.height);
         
         if (Math.random() < 0.3) {
-          particles.push({
-            x: powerUp.x + powerUp.width/2,
-            y: powerUp.y + powerUp.height/2,
-            radius: Math.random()*2+1,
-            color: powerUp.color,
-            speedX: (Math.random()-0.5)*2,
-            speedY: (Math.random()-0.5)*2,
-            life: 30
-          });
+          createParticle(
+            powerUp.x + powerUp.width / 2,
+            powerUp.y + powerUp.height / 2,
+            Math.random() * 2 + 1,
+            powerUp.color,
+            (Math.random() - 0.5) * 2,
+            (Math.random() - 0.5) * 2,
+            30
+          );
         }
-      }
+      });
     }
     
     function updateExplosions(deltaTime) {
@@ -1328,21 +1399,40 @@
       }
     }
     
+    function createParticle(x, y, radius, color, speedX, speedY, life) {
+      const particle = particlePool.find(p => !p.active);
+      if (particle) {
+        particle.active = true;
+        particle.x = x;
+        particle.y = y;
+        particle.radius = radius;
+        const hex = color.replace('#', '');
+        particle.color = {
+          r: parseInt(hex.substring(0,2), 16),
+          g: parseInt(hex.substring(2,4), 16),
+          b: parseInt(hex.substring(4,6), 16)
+        };
+        particle.speedX = speedX;
+        particle.speedY = speedY;
+        particle.life = life;
+      }
+    }
+    
     function updateParticles(deltaTime) {
-      for (let i = particles.length - 1; i >= 0; i--) {
-        const particle = particles[i];
+      particlePool.forEach(particle => {
+        if (!particle.active) return;
         particle.x += particle.speedX;
         particle.y += particle.speedY;
         particle.life -= deltaTime * 60;
         if (particle.life <= 0) {
-          particles.splice(i, 1);
-          continue;
+          particle.active = false;
+          return;
         }
-        ctx.fillStyle = `rgba(${parseInt(particle.color.slice(1,3),16)}, ${parseInt(particle.color.slice(3,5),16)}, ${parseInt(particle.color.slice(5,7),16)}, ${particle.life/30})`;
+        ctx.fillStyle = `rgba(${particle.color.r}, ${particle.color.g}, ${particle.color.b}, ${particle.life / 30})`;
         ctx.beginPath();
-        ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI*2);
+        ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
         ctx.fill();
-      }
+      });
     }
     
     function checkCollisions() {
@@ -1372,15 +1462,15 @@
                 opacity: 1
               });
               for (let k = 0; k < (enemy.type === "boss" ? 25 : 15); k++) {
-                particles.push({
-                  x: enemy.x + enemy.width/2,
-                  y: enemy.y + enemy.height/2,
-                  radius: Math.random()*3+1,
-                  color: enemy.color,
-                  speedX: (Math.random()-0.5)*6,
-                  speedY: (Math.random()-0.5)*6,
-                  life: 35
-                });
+                createParticle(
+                  enemy.x + enemy.width / 2,
+                  enemy.y + enemy.height / 2,
+                  Math.random() * 3 + 1,
+                  enemy.color,
+                  (Math.random() - 0.5) * 6,
+                  (Math.random() - 0.5) * 6,
+                  35
+                );
               }
               combo++;
               const oldMultiplier = comboMultiplier;
@@ -1429,10 +1519,10 @@
         });
       }
     
-      for (let i = powerUps.length - 1; i >= 0; i--) {
-        const powerUp = powerUps[i];
+      powerUpPool.forEach(powerUp => {
+        if (!powerUp.active) return;
         if (checkCollision(player, powerUp)) {
-          powerUps.splice(i, 1);
+          powerUp.active = false;
           if (powerUp.effect === "speed") {
             player.shootDelay = Math.max(80, player.shootDelay - 40);
             score += 75;
@@ -1464,7 +1554,7 @@
           updateScoreDisplay();
           playSound("powerup");
         }
-      }
+      });
     }
     
     function checkCollision(a, b) {
@@ -1481,7 +1571,6 @@
       screenShake = 12;
       updateScoreDisplay();
       updateComboDisplay();
-      // Reset mobile control positions so they don’t overlap after a life is lost
       if (isMobile) {
         joystickContainer.style.left = "10px";
         joystickContainer.style.bottom = "10px";
@@ -1506,6 +1595,7 @@
         autoFireInterval = null;
       }
       finalScoreDisplay.textContent = `Your score: ${Math.floor(score)}`;
+      mobilePopup.style.display = "none";
       gameOverScreen.style.opacity = "0";
       gameOverScreen.style.display = "flex";
       setTimeout(() => gameOverScreen.style.opacity = "1", 10);
@@ -1534,6 +1624,7 @@
       howToPlayScreen.style.display = "none";
       pauseScreen.style.display = "none";
       settingsScreen.style.display = "none";
+      mobilePopup.style.display = "none";
       highScoreScreen.style.opacity = "0";
       highScoreScreen.style.display = "flex";
       setTimeout(() => highScoreScreen.style.opacity = "1", 10);
@@ -1564,6 +1655,7 @@
       highScoreScreen.style.display = "none";
       pauseScreen.style.display = "none";
       settingsScreen.style.display = "none";
+      mobilePopup.style.display = "none";
       howToPlayScreen.style.opacity = "0";
       howToPlayScreen.style.display = "flex";
       setTimeout(() => howToPlayScreen.style.opacity = "1", 10);
@@ -1581,6 +1673,7 @@
       highScoreScreen.style.display = "none";
       howToPlayScreen.style.display = "none";
       pauseScreen.style.display = "none";
+      mobilePopup.style.display = "none";
       settingsScreen.style.opacity = "0";
       settingsScreen.style.display = "flex";
       setTimeout(() => settingsScreen.style.opacity = "1", 10);
@@ -1591,45 +1684,62 @@
       canvas.style.cursor = "default";
     
       settingsScreen.innerHTML = `
-                <h2>SETTINGS</h2>
-                <div class="settings-container">
-                    <label for="difficulty-setting" style="display: block; margin-bottom: 10px;">Difficulty:</label>
-                    <select id="difficulty-setting">
-                        <option value="easy">Easy</option>
-                        <option value="normal" selected>Normal</option>
-                        <option value="hard">Hard</option>
-                    </select>
+        <h2>SETTINGS</h2>
+        <div class="settings-container">
+          <label for="difficulty-setting" style="display: block; margin-bottom: 10px;">Difficulty:</label>
+          <select id="difficulty-setting">
+            <option value="easy" ${difficulty === "easy" ? "selected" : ""}>Easy</option>
+            <option value="normal" ${difficulty === "normal" ? "selected" : ""}>Normal</option>
+            <option value="hard" ${difficulty === "hard" ? "selected" : ""}>Hard</option>
+          </select>
     
-                    <label for="volume-slider" style="display: block; margin: 20px 0 10px;">Volume:</label>
-                    <input type="range" id="volume-slider" min="0" max="1" step="0.1" value="${backgroundMusic.volume}">
+          <label style="display: block; margin: 20px 0 10px;">Spaceship Color:</label>
+          <div class="color-selector">
+            <button class="arrow-btn" id="color-left-btn">←</button>
+            <div class="color-preview"><canvas id="color-preview-canvas" class="color-preview-canvas"></canvas></div>
+            <button class="arrow-btn" id="color-right-btn">→</button>
+          </div>
     
-                    <label style="display: block; margin: 20px 0 10px;">Spaceship Color:</label>
-                    <div class="color-selector">
-                        <button class="arrow-btn" id="color-left-btn">←</button>
-                        <div class="color-preview"><canvas id="color-preview-canvas" class="color-preview-canvas"></canvas></div>
-                        <button class="arrow-btn" id="color-right-btn">→</button>
-                    </div>
-    
-                    <label for="sound-toggle" style="display: block; margin: 20px 0 10px;">Sound:</label>
-                    <button id="sound-toggle" data-sound="${soundOn ? 'on' : 'off'}">${soundOn ? 'ON' : 'OFF'}</button>
-                </div>
-                <button id="back-from-settings-btn">BACK</button>
-            `;
-      document.getElementById("difficulty-setting").value = difficulty;
+          <label for="sound-toggle" style="display: block; margin: 20px 0 10px;">Sound:</label>
+          <button id="sound-toggle" data-sound="${soundOn ? 'on' : 'off'}">${soundOn ? 'ON' : 'OFF'}</button>
+        </div>
+        <button id="back-from-settings-btn">BACK</button>
+      `;
+      
+      // Add event listeners to save settings when changed
+      document.getElementById("difficulty-setting").addEventListener("change", (e) => {
+        difficulty = e.target.value;
+        saveSettings();
+      });
+      
       document.getElementById("color-left-btn").addEventListener("click", () => {
         playerColorIndex = (playerColorIndex - 1 + playerColors.length) % playerColors.length;
         updateColorPreview();
+        saveSettings();
       });
+      
       document.getElementById("color-right-btn").addEventListener("click", () => {
         playerColorIndex = (playerColorIndex + 1) % playerColors.length;
         updateColorPreview();
+        saveSettings();
       });
-      document.getElementById("sound-toggle").addEventListener("click", toggleSound);
+      
+      document.getElementById("sound-toggle").addEventListener("click", () => {
+        soundOn = !soundOn;
+        const soundToggle = document.getElementById("sound-toggle");
+        soundToggle.textContent = soundOn ? "ON" : "OFF";
+        soundToggle.setAttribute("data-sound", soundOn ? "on" : "off");
+        saveSettings();
+        if (!soundOn) {
+          backgroundMusic.pause();
+          bossMusic.pause();
+        } else if (gameRunning && !isPaused) {
+          if (bossActive) bossMusic.play();
+          else backgroundMusic.play();
+        }
+      });
+      
       document.getElementById("back-from-settings-btn").addEventListener("click", showStartScreen);
-      document.getElementById("volume-slider").addEventListener("input", () => {
-        backgroundMusic.volume = document.getElementById("volume-slider").value;
-        bossMusic.volume = document.getElementById("volume-slider").value;
-      });
     
       updateColorPreview();
     }
@@ -1665,18 +1775,13 @@
       setTimeout(() => previewDiv.style.transform = "scale(1)", 200);
     }
     
-    function toggleSound() {
-      soundOn = !soundOn;
-      const soundToggle = document.getElementById("sound-toggle");
-      soundToggle.textContent = soundOn ? "ON" : "OFF";
-      soundToggle.setAttribute("data-sound", soundOn ? "on" : "off");
-      if (!soundOn) {
-        backgroundMusic.pause();
-        bossMusic.pause();
-      } else if (gameRunning && !isPaused) {
-        if (bossActive) bossMusic.play();
-        else backgroundMusic.play();
-      }
+    function saveSettings() {
+      const settings = {
+        difficulty: difficulty,
+        playerColorIndex: playerColorIndex,
+        soundOn: soundOn
+      };
+      localStorage.setItem("spaceShooterSettings", JSON.stringify(settings));
     }
     
     function showStartScreen() {
@@ -1688,7 +1793,8 @@
       howToPlayScreen.style.display = "none";
       pauseScreen.style.display = "none";
       settingsScreen.style.display = "none";
-      if (isMobile) mobileControls.style.display = "block";
+      mobilePopup.style.display = "none";
+      if (isMobile) mobileControls.style.display = "none";
       backgroundMusic.pause();
       bossMusic.pause();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1716,9 +1822,8 @@
       }
     }
     
-    // Initialize game and event listeners
     init();
     setupEventListeners();
   </script>
-</body>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'924578187c4dc027',t:'MTc0MjY0NDIwMi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script><script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'9255de934dfebf98',t:'MTc0MjgxNjE3Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
 </html>
